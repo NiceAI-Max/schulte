@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>舒尔特方格</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    -webkit-user-select: none;
+    padding: 16px;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    letter-spacing: 0.05em;
+  }
+
+  .info-bar {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 16px;
+    font-size: 1rem;
+  }
+
+  .info-bar span { color: #94a3b8; }
+  .info-bar strong { color: #38bdf8; font-variant-numeric: tabular-nums; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+    width: min(90vw, 400px);
+    aspect-ratio: 1;
+  }
+
+  .cell {
+    background: #1e293b;
+    border: 2px solid #334155;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(1.4rem, 5vw, 2.2rem);
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+    color: #f1f5f9;
+  }
+
+  .cell:active { transform: scale(0.93); }
+
+  .cell.correct {
+    background: #065f46;
+    border-color: #10b981;
+    color: #6ee7b7;
+  }
+
+  .cell.wrong {
+    background: #7f1d1d;
+    border-color: #ef4444;
+    color: #fca5a5;
+    animation: shake 0.3s;
+  }
+
+  .cell.next-hint {
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.3);
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+  }
+
+  .controls {
+    margin-top: 16px;
+    display: flex;
+    gap: 10px;
+  }
+
+  button {
+    background: #334155;
+    color: #e2e8f0;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 24px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  button:hover { background: #475569; }
+  button:active { background: #64748b; }
+
+  .overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(6px);
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+  }
+
+  .overlay.show { display: flex; }
+
+  .dialog {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 16px;
+    padding: 32px;
+    text-align: center;
+    max-width: 320px;
+    width: 90%;
+  }
+
+  .dialog h2 { font-size: 1.3rem; margin-bottom: 12px; }
+  .dialog .result-time { font-size: 2.4rem; font-weight: 700; color: #38bdf8; margin: 12px 0; }
+  .dialog p { color: #94a3b8; margin-bottom: 20px; }
+  .dialog-buttons { display: flex; gap: 10px; }
+  .dialog-buttons button { flex: 1; padding: 12px; font-size: 1rem; }
+  .dialog-buttons .btn-primary { background: #2563eb; }
+  .dialog-buttons .btn-primary:hover { background: #3b82f6; }
+  .dialog-buttons .btn-secondary { background: #334155; }
+  .dialog-buttons .btn-secondary:hover { background: #475569; }
+
+  .benchmark {
+    margin-top: 16px;
+    width: min(90vw, 400px);
+  }
+
+  .benchmark summary {
+    cursor: pointer;
+    color: #94a3b8;
+    font-size: 0.85rem;
+    text-align: center;
+    list-style: none;
+    padding: 6px 0;
+  }
+
+  .benchmark summary::-webkit-details-marker { display: none; }
+  .benchmark summary::before { content: "▸ "; }
+  .benchmark[open] summary::before { content: "▾ "; }
+  .benchmark summary:hover { color: #e2e8f0; }
+
+  .benchmark-table {
+    width: 100%;
+    margin-top: 8px;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+  }
+
+  .benchmark-table th {
+    background: #1e293b;
+    color: #94a3b8;
+    font-weight: 600;
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 1px solid #334155;
+  }
+
+  .benchmark-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid #1e293b;
+    color: #cbd5e1;
+  }
+
+  .benchmark-table tr:nth-child(even) td { background: rgba(30, 41, 59, 0.5); }
+
+  .benchmark-table .level-good { color: #6ee7b7; }
+  .benchmark-table .level-mid { color: #fbbf24; }
+  .benchmark-table .level-weak { color: #f87171; }
+
+  .benchmark-table .group-label {
+    font-weight: 600;
+    color: #38bdf8;
+  }
+
+  .records {
+    margin-top: 14px;
+    width: min(90vw, 400px);
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    font-size: 0.85rem;
+  }
+
+  .record-item {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 6px 14px;
+    text-align: center;
+    min-width: 90px;
+  }
+
+  .record-label { color: #94a3b8; font-size: 0.78rem; }
+  .record-time { color: #fbbf24; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .record-empty { color: #475569; font-weight: 400; }
+
+  .record-new {
+    animation: glow 0.8s ease-in-out 2;
+  }
+
+  @keyframes glow {
+    0%, 100% { border-color: #334155; }
+    50% { border-color: #fbbf24; box-shadow: 0 0 8px rgba(251, 191, 36, 0.3); }
+  }
+</style>
+</head>
+<body>
+
+<h1>舒尔特方格 5×5</h1>
+<div class="info-bar">
+  <div><span>用时 </span><strong id="timer">0.00</strong><span> 秒</span></div>
+  <div><span>下一个 </span><strong id="next-num">1</strong></div>
+</div>
+<div class="grid" id="grid"></div>
+<div class="controls">
+  <button id="btn-restart">开始</button>
+</div>
+<div class="records" id="records">
+  <div class="record-item"><div class="record-label">🥇 第1名</div><div class="record-time" id="r1">--</div></div>
+  <div class="record-item"><div class="record-label">🥈 第2名</div><div class="record-time" id="r2">--</div></div>
+  <div class="record-item"><div class="record-label">🥉 第3名</div><div class="record-time" id="r3">--</div></div>
+</div>
+<details class="benchmark">
+  <summary>参考标准</summary>
+  <table class="benchmark-table">
+    <thead>
+      <tr>
+        <th>年龄段</th>
+        <th>优秀</th>
+        <th>中等</th>
+        <th>较差</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="group-label">7—12岁</td>
+        <td class="level-good">≤ 26″</td>
+        <td class="level-mid">42″</td>
+        <td class="level-weak">50″+</td>
+      </tr>
+      <tr>
+        <td class="group-label">12—17岁</td>
+        <td class="level-good">≤ 16″</td>
+        <td class="level-mid">26″</td>
+        <td class="level-weak">36″+</td>
+      </tr>
+      <tr>
+        <td class="group-label">18岁+ 成人</td>
+        <td class="level-good">~ 8″</td>
+        <td class="level-mid">20″</td>
+        <td class="level-weak">—</td>
+      </tr>
+    </tbody>
+  </table>
+</details>
+
+<div class="overlay" id="overlay">
+  <div class="dialog">
+    <h2>恭喜完成!</h2>
+    <div class="result-time" id="result-time">0.00 秒</div>
+    <p id="result-msg"></p>
+    <div class="dialog-buttons">
+      <button id="btn-again" class="btn-primary">再来一次</button>
+      <button id="btn-rest" class="btn-secondary">休息一下</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const grid = document.getElementById('grid');
+const timerEl = document.getElementById('timer');
+const nextNumEl = document.getElementById('next-num');
+const overlay = document.getElementById('overlay');
+const resultTimeEl = document.getElementById('result-time');
+const resultMsgEl = document.getElementById('result-msg');
+
+let cells = [];
+let nextNum = 1;
+let startTime = null;
+let timerRAF = null;
+let finished = false;
+let lastCorrectCell = null;
+
+const STORAGE_KEY = 'schulte-top3';
+
+function loadRecords() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+  catch { return []; }
+}
+
+function saveRecords(records) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+}
+
+function addRecord(ms) {
+  const records = loadRecords();
+  records.push(ms);
+  records.sort((a, b) => a - b);
+  const top3 = records.slice(0, 3);
+  saveRecords(top3);
+  return top3;
+}
+
+function renderRecords(newIndex) {
+  const records = loadRecords();
+  for (let i = 0; i < 3; i++) {
+    const el = document.getElementById('r' + (i + 1));
+    const item = el.parentElement;
+    item.classList.remove('record-new');
+    if (records[i] != null) {
+      el.textContent = formatTime(records[i]) + '″';
+      el.classList.remove('record-empty');
+      if (newIndex === i) {
+        item.classList.add('record-new');
+      }
+    } else {
+      el.textContent = '--';
+      el.classList.add('record-empty');
+    }
+  }
+}
+
+function tryAddRecord(ms) {
+  const before = loadRecords();
+  const after = addRecord(ms);
+  const idx = after.indexOf(ms);
+  if (idx !== -1 && (before.length < 3 || ms < before[before.length - 1])) {
+    renderRecords(idx);
+    return true;
+  }
+  renderRecords(-1);
+  return false;
+}
+
+function goHome() {
+  if (timerRAF) cancelAnimationFrame(timerRAF);
+  startTime = null;
+  finished = true;
+  timerEl.textContent = '0.00';
+  nextNumEl.textContent = '1';
+  overlay.classList.remove('show');
+  document.getElementById('btn-restart').textContent = '开始';
+  buildGrid();
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function formatTime(ms) {
+  return (ms / 1000).toFixed(2);
+}
+
+function updateTimer() {
+  if (!startTime || finished) return;
+  const elapsed = performance.now() - startTime;
+  timerEl.textContent = formatTime(elapsed);
+  timerRAF = requestAnimationFrame(updateTimer);
+}
+
+function buildGrid() {
+  grid.innerHTML = '';
+  cells = [];
+  lastCorrectCell = null;
+  const nums = shuffle(Array.from({ length: 25 }, (_, i) => String(i + 1)));
+  nums.forEach(n => {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.textContent = n;
+    cell.dataset.num = parseInt(n);
+    cell.addEventListener('click', () => onCellClick(cell));
+    grid.appendChild(cell);
+    cells.push(cell);
+  });
+}
+
+function startGame() {
+  nextNum = 1;
+  finished = false;
+  if (timerRAF) cancelAnimationFrame(timerRAF);
+  overlay.classList.remove('show');
+
+  startTime = performance.now();
+  timerEl.textContent = '0.00';
+  nextNumEl.textContent = '1';
+  updateTimer();
+  document.getElementById('btn-restart').textContent = '重新开始';
+
+  buildGrid();
+}
+
+function onCellClick(cell) {
+  if (finished) return;
+
+  const num = parseInt(cell.dataset.num);
+
+  if (num === nextNum) {
+    if (lastCorrectCell) lastCorrectCell.classList.remove('correct');
+    cell.classList.add('correct');
+    lastCorrectCell = cell;
+    nextNum++;
+    nextNumEl.textContent = nextNum <= 25 ? nextNum : '-';
+
+    if (nextNum > 25) {
+      finished = true;
+      cancelAnimationFrame(timerRAF);
+      const elapsed = performance.now() - startTime;
+      timerEl.textContent = formatTime(elapsed);
+      resultTimeEl.textContent = formatTime(elapsed) + ' 秒';
+      const isNew = tryAddRecord(elapsed);
+      resultMsgEl.textContent = isNew ? '新纪录! ' + getResultMsg(elapsed) : getResultMsg(elapsed);
+      setTimeout(() => overlay.classList.add('show'), 300);
+    }
+  } else {
+    cell.classList.remove('wrong');
+    void cell.offsetWidth;
+    cell.classList.add('wrong');
+    setTimeout(() => cell.classList.remove('wrong'), 400);
+  }
+}
+
+function getResultMsg(ms) {
+  const s = ms / 1000;
+  if (s < 25) return '天赋异禀!';
+  if (s < 40) return '注意力非常集中!';
+  if (s < 60) return '不错的成绩!';
+  if (s < 90) return '继续练习，会更快!';
+  return '多练几次，提升专注力!';
+}
+
+document.getElementById('btn-restart').addEventListener('click', startGame);
+document.getElementById('btn-again').addEventListener('click', startGame);
+document.getElementById('btn-rest').addEventListener('click', goHome);
+
+buildGrid();
+renderRecords(-1);
+</script>
+</body>
+</html>
